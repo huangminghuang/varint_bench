@@ -12,7 +12,7 @@ suite varint_test = []
         std::array<char, 10> storage;
         std::span<char> data{storage}, data1{storage}, data2{storage};
         const parse_varint_unrolled<arg_type> p1;
-        const shift_mix_parse_varint<arg_type> p2;
+        const shift_mix_parse_varint_op<arg_type> p2;
 
         pack_varint(arg, data);
 

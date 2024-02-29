@@ -70,37 +70,17 @@ struct parse_varint_unrolled
 };
 
 // Shifts "byte" left by n * 7 bits, filling vacated bits from `ones`.
-template <int n>
-constexpr inline int64_t VarintShlByte(int8_t byte, int64_t ones)
+// template <int n>
+constexpr inline int64_t VarintShlByte(int n, int8_t byte, int64_t ones)
 {
     return static_cast<int64_t>((static_cast<uint64_t>(byte) << n * 7) |
                                 (static_cast<uint64_t>(ones) >> (64 - n * 7)));
 }
 
-// Shifts "byte" left by n * 7 bits, filling vacated bits from `ones` and
-// bitwise ANDs the resulting value into the input/output `res` parameter.
-// Returns true if the result was not negative.
-template <int n>
-constexpr inline bool VarintShlAnd(int8_t byte, int64_t ones,
-                                   int64_t &res)
-{
-    res &= VarintShlByte<n>(byte, ones);
-    return res >= 0;
-}
 
-// Shifts `byte` left by n * 7 bits, filling vacated bits with ones, and
-// puts the new value in the output only parameter `res`.
-// Returns true if the result was not negative.
-template <int n>
-constexpr inline bool VarintShl(int8_t byte, int64_t ones,
-                                int64_t &res)
-{
-    res = VarintShlByte<n>(byte, ones);
-    return res >= 0;
-}
 
 template <typename VarintType>
-constexpr inline const char *ShiftMixParseVarint(const char *p,
+constexpr inline const char *shift_mix_parse_varint(const char *p,
                                                  int64_t &res1)
 {
     using Signed = std::make_signed_t<VarintType>;
@@ -131,6 +111,22 @@ constexpr inline const char *ShiftMixParseVarint(const char *p,
     const auto last = [&p]
     { return static_cast<const int8_t>(p[-1]); };
 
+    // Shifts "byte" left by n * 7 bits, filling vacated bits from `ones`.
+  constexpr auto shl_byte = [](int n, int8_t byte, int64_t ones) constexpr -> int64_t {
+    return static_cast<int64_t>((static_cast<uint64_t>(byte) << n * 7) | (static_cast<uint64_t>(ones) >> (64 - n * 7)));
+  };
+
+  constexpr auto shl_and = [shl_byte](int n, int8_t byte, int64_t ones, int64_t &res) {
+    res &= shl_byte(n, byte, ones);
+    return res >= 0;
+  };
+
+  constexpr auto shl = [shl_byte](int n, int8_t byte, int64_t ones, int64_t &res) {
+    res = shl_byte(n, byte, ones);
+    return res >= 0;
+  };
+
+
     int64_t res2, res3; // accumulated result chunks
 
     const auto done1 = [&]
@@ -149,51 +145,49 @@ constexpr inline const char *ShiftMixParseVarint(const char *p,
     res1 = next();
     if (res1 >= 0) [[likely]]
         return p;
-    
+
     // Densify all ops with explicit FALSE predictions from here on, except that
     // we predict length = 5 as a common length for fields like timestamp.
-    if (VarintShl<1>(next(), res1, res2)) [[unlikely]]
+    if (shl(1, next(), res1, res2)) [[unlikely]]
         return done1();
-    
-    if (VarintShl<2>(next(), res1, res3)) [[unlikely]]
+
+    if (shl(2, next(), res1, res3)) [[unlikely]]
         return done2();
-    
-    if (VarintShlAnd<3>(next(), res1, res2)) [[unlikely]]
+
+    if (shl_and(3, next(), res1, res2)) [[unlikely]]
         return done2();
-    
-    if (VarintShlAnd<4>(next(), res1, res3)) [[likely]]
+
+    if (shl_and(4, next(), res1, res3)) [[likely]]
         return done2();
-    
+
     if (kIs64BitVarint)
     {
-        if (VarintShlAnd<5>(next(), res1, res2)) [[unlikely]]
+        if (shl_and(5, next(), res1, res2)) [[unlikely]]
             return done2();
-        
-        if (VarintShlAnd<6>(next(), res1, res3)) [[unlikely]]
+
+        if (shl_and(6, next(), res1, res3)) [[unlikely]]
             return done2();
-        
-        if (VarintShlAnd<7>(next(), res1, res2)) [[unlikely]]
+
+        if (shl_and(7, next(), res1, res2)) [[unlikely]]
             return done2();
-        
-        if (VarintShlAnd<8>(next(), res1, res3)) [[unlikely]]
+
+        if (shl_and(8, next(), res1, res3)) [[unlikely]]
             return done2();
-        
     }
     else
     {
         // An overlong int32 is expected to span the full 10 bytes
         if (!(next() & 0x80)) [[unlikely]]
             return done2();
-        
+
         if (!(next() & 0x80)) [[unlikely]]
             return done2();
-        
+
         if (!(next() & 0x80)) [[unlikely]]
             return done2();
-        
+
         if (!(next() & 0x80)) [[unlikely]]
             return done2();
-        
     }
 
     // For valid 64bit varints, the 10th byte/ptr[9] should be exactly 1. In this
@@ -226,14 +220,14 @@ constexpr inline const char *ShiftMixParseVarint(const char *p,
 }
 
 template <typename Type>
-struct shift_mix_parse_varint
+struct shift_mix_parse_varint_op
 {
     using type = Type;
     std::errc operator()(Type &value, std::span<char> &data) const
     {
         auto end = data.data() + data.size();
         int64_t v;
-        auto p = ShiftMixParseVarint<Type>(data.data(), v);
+        auto p = shift_mix_parse_varint<Type>(data.data(), v);
         value = v;
         if (p == nullptr) [[unlikely]]
             return std::errc::value_too_large;

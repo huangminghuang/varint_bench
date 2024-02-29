@@ -40,6 +40,6 @@ void BM_fun(benchmark::State &state)
 
 BENCHMARK(BM_fun<parse_varint_loop<uint32_t>>);
 BENCHMARK(BM_fun<parse_varint_unrolled<uint32_t>>);
-BENCHMARK(BM_fun<shift_mix_parse_varint<uint32_t>>);
+BENCHMARK(BM_fun<shift_mix_parse_varint_op<uint32_t>>);
 
 BENCHMARK_MAIN();
