@@ -99,7 +99,7 @@ constexpr inline bool VarintShl(int8_t byte, int64_t ones,
     return res >= 0;
 }
 
-template <typename VarintType, int limit = 10>
+template <typename VarintType>
 constexpr inline const char *ShiftMixParseVarint(const char *p,
                                                  int64_t &res1)
 {
@@ -136,7 +136,7 @@ constexpr inline const char *ShiftMixParseVarint(const char *p,
     const auto done1 = [&]
     {
         res1 &= res2;
-        __builtin_assume(p != nullptr);
+        // __builtin_assume(p != nullptr);
         return p;
     };
 
@@ -146,88 +146,54 @@ constexpr inline const char *ShiftMixParseVarint(const char *p,
         return done1();
     };
 
-    const auto limit0 = [&]
-    {
-        __builtin_assume(p != nullptr);
-        __builtin_assume(res1 < 0);
-        return p;
-    };
-
-    const auto limit1 = [&]
-    {
-        res1 &= res2;
-        return limit0();
-    };
-
-    const auto limit2 = [&]
-    {
-        res2 &= res3;
-        return limit1();
-    };
-
     res1 = next();
     if (res1 >= 0) [[likely]]
         return p;
-    if (limit <= 1)
-        return limit0();
-
+    
     // Densify all ops with explicit FALSE predictions from here on, except that
     // we predict length = 5 as a common length for fields like timestamp.
     if (VarintShl<1>(next(), res1, res2)) [[unlikely]]
         return done1();
-    if (limit <= 2)
-        return limit1();
+    
     if (VarintShl<2>(next(), res1, res3)) [[unlikely]]
         return done2();
-    if (limit <= 3)
-        return limit2();
+    
     if (VarintShlAnd<3>(next(), res1, res2)) [[unlikely]]
         return done2();
-    if (limit <= 4)
-        return limit2();
+    
     if (VarintShlAnd<4>(next(), res1, res3)) [[likely]]
         return done2();
-    if (limit <= 5)
-        return limit2();
-
+    
     if (kIs64BitVarint)
     {
         if (VarintShlAnd<5>(next(), res1, res2)) [[unlikely]]
             return done2();
-        if (limit <= 6)
-            return limit2();
+        
         if (VarintShlAnd<6>(next(), res1, res3)) [[unlikely]]
             return done2();
-        if (limit <= 7)
-            return limit2();
+        
         if (VarintShlAnd<7>(next(), res1, res2)) [[unlikely]]
             return done2();
-        if (limit <= 8)
-            return limit2();
+        
         if (VarintShlAnd<8>(next(), res1, res3)) [[unlikely]]
             return done2();
-        if (limit <= 9)
-            return limit2();
+        
     }
     else
     {
         // An overlong int32 is expected to span the full 10 bytes
         if (!(next() & 0x80)) [[unlikely]]
             return done2();
-        if (limit <= 6)
-            return limit2();
+        
         if (!(next() & 0x80)) [[unlikely]]
             return done2();
-        if (limit <= 7)
-            return limit2();
+        
         if (!(next() & 0x80)) [[unlikely]]
             return done2();
-        if (limit <= 8)
-            return limit2();
+        
         if (!(next() & 0x80)) [[unlikely]]
             return done2();
-        if (limit <= 9)
-            return limit2();
+        
     }
 
     // For valid 64bit varints, the 10th byte/ptr[9] should be exactly 1. In this
