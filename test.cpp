@@ -1,4 +1,5 @@
 #include "parse_varint.h"
+#include "varint_parser.h"
 
 #include <boost/ut.hpp>
 

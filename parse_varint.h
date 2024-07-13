@@ -3,6 +3,7 @@
 #include <climits>
 #include <system_error>
 #include <span>
+#include <cstdint>
 
 template <typename Type>
 constexpr auto varint_max_size = sizeof(Type) * CHAR_BIT / (CHAR_BIT - 1) + 1;
